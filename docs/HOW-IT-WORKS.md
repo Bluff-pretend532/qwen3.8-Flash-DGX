@@ -36,7 +36,8 @@ llama.cpp does with its GGUF — we just bring it to the vLLM path, which keeps 
 QSA/GDN kernels and MTP.
 
 Result: **~76 GiB resident** (78 GiB of non-table weights minus a little), leaving
-~12–17 GiB for KV at `GPU_MEM=0.78`, ctx 32k, ~19× concurrency.
+~20–22 GiB for KV at `GPU_MEM=0.85` — a 720–790k-token pool, i.e. ~3× concurrency at
+the native 262k or a single 500k request with YaRN.
 
 ## The patch (`src/vllm_ple_mmap.py`)
 
@@ -83,6 +84,29 @@ issues. All are handled by the patch + the flags in `scripts/serve.sh`:
      (`index out of bounds`) fires in the embedding gather codegen on sm_121. PIECEWISE
      capture with compile disabled on the splitting op sidesteps it.
 
+## Long context: what works and what does not
+
+Measured on the GX10 with the mmap patch, `GPU_MEM=0.85`, MTP=2 unless noted.
+
+| Config | Result |
+|---|---|
+| 262144 native, MTP | KV pool ~720–790k tokens, ~3× concurrency at full length. Baseline prod. |
+| **YaRN, CTX 500000, MTP** | **Works.** Pool ~724k tokens. Needle-in-a-haystack found at 276k and 414k tokens; decode 25–28 tok/s typical (36 on predictable text, ~94% draft acceptance there); no OOM. **This is the validated ceiling.** |
+| YaRN, CTX 800000, MTP, `GPU_MEM=0.875` | Boots (pool 928k) and answers, but a 300k-token prefill got **SIGTERM from earlyoom** at 1.96% free memory: the prefill's activation peak plus the draft do not fit in ~5 GiB of headroom. |
+| `--kv-cache-dtype fp8` | **Refused by the model**: `NotImplementedError: Qwen3.8-Flash-Next QSA requires a BF16 main KV cache`. So the "halve the KV" lever does not exist; at ~29 KB/token a single 1M request needs ~30 GiB of KV. |
+
+Two YaRN-specific traps, both handled by `scripts/serve.sh`:
+
+- YaRN is applied with Qwen's published `--hf-overrides` (rope `yarn`, factor 4,
+  `original_max_position_embeddings` 262144) and needs `VLLM_ALLOW_LONG_MAX_MODEL_LEN=1`.
+- **YaRN + MTP fails to boot** with `--mamba-block-size can only be set with
+  --enable-prefix-caching`. Cause: dict `hf_overrides` are not propagated to the draft
+  model (`SpeculativeConfig.compose_draft_hf_overrides` only forwards callables), so the
+  draft keeps `max_model_len=262144` while sharing the `cache_config`, whose
+  `mamba_block_size` was auto-set to the target's `max_model_len`. Fix: put
+  `"max_model_len": <CTX>` inside `--speculative-config`, which overrides the draft's
+  length (`_maybe_override_draft_max_model_len`).
+
 ## Correctness
 
 `src/test_ple_mmap_cpu.py` builds synthetic FP8 shards (with the real safetensors
@@ -103,13 +127,25 @@ gather turns the n-gram contribution to noise and the model degrades immediately
 - **Prefill** ~2,400–2,660 tok/s (ctx 32k, single request). This is the axis that
   matters most versus llama.cpp (~540 tok/s), because Flash-Next's QSA prefill kernels
   only exist in vLLM/SGLang.
-- **Decode** ~17 tok/s without speculation, ~27 tok/s with `MTP=2` (≈67% draft
-  acceptance). The gather does one host↔device sync per decode step, which is pure
+- **Decode** ~17 tok/s without speculation; with `MTP=2` **25–28 tok/s** on free-form
+  prose (~63% draft acceptance) and up to ~36 tok/s on predictable text (~94%). The gather does one host↔device sync per decode step, which is pure
   latency at batch 1; MTP amortizes it. Removing that sync (staging ids through a
   pinned buffer, or a small resident hot-row cache) is the obvious next optimization.
 - **First request into a cold region** of the table pays some NVMe I/O; it smooths out
   as the page cache warms. `PREWARM=1` streams the whole table once at boot (~10 s) for
   steadier first-request latency.
+
+## Independent reproduction and the native offload path
+
+[@jschmied](https://github.com/jschmied) reproduced this recipe on a DGX Spark
+([issue #1](https://github.com/blazux/qwen3.8-Flash-DGX/issues/1)). They also
+ran vLLM's native `VLLM_PLE_CPU_OFFLOAD=1` path and documented what it needs on the
+NVFP4 checkpoint (the `Fp8Config` gate in `_get_ple_embedding_quant_method`, and
+`CAP_SYS_PTRACE` because `yama.ptrace_scope=1` blocks the sibling-process
+`pidfd_getfd` used for the CUDA-IPC handoff), plus concurrency traces showing
+aggregate throughput of ~267 tok/s at 48 streams with page-fault cost per token
+*falling* with batch size. Full notes:
+<https://github.com/jschmied/qwen38-flash-next-gb10>.
 
 ## Upstream references
 
